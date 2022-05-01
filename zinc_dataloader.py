@@ -88,7 +88,7 @@ class ZINC(Dataset):
             words_x2_1 = self._tokenize(line_x2_1, with_begin_and_end=False)
             words_x2_1 = words_x2_1 + ['<pad>'] * (int((self.max_sequence_length_x2/2)) - len(words_x2_1))
             idx_x2_1 = self.vocabulary.lookup_indices(words_x2_1)
-            #
+
             line_x2_2 = line_x2_2.replace('*', "").strip()
             words_x2_2 = self._tokenize(line_x2_2, with_begin_and_end=False)
             words_x2_2 = words_x2_2 + ['<pad>'] * (int((self.max_sequence_length_x2/2)) - len(words_x2_2))

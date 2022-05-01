@@ -168,7 +168,6 @@ class ZINC(Dataset):
         self._load_vocab()
 
 
-
 if __name__ == '__main__':
     dataset = ZINC(
         data_dir='./zinc/',
@@ -177,11 +176,10 @@ if __name__ == '__main__':
     print(dataset.vocab_size)
     print(dataset.vocabulary.get_itos())
     print(dataset.vocabulary.lookup_indices(['C']))
-    print(len(dataset))
-    train_data, test_data = torch.utils.data.random_split(dataset, [1274621, 54925])
+    num_train= int(len(dataset) *0.8)
+    num_test= len(dataset) -num_train
+
+    train_data, test_data = torch.utils.data.random_split(dataset, [num_train, num_test])
     train_dataloader = DataLoader(train_data, batch_size=64, shuffle=True)
     test_dataloader = DataLoader(test_data, batch_size=64, shuffle=True)
-
-    # for x in test_dataloader:
-    #     print(x)
 

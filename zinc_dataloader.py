@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader
 
 class ZINC(Dataset):
 
-    def __init__(self, data_dir, create_data, **kwargs):
+    def __init__(self, data_dir, create_data, mode, **kwargs):
 
         super().__init__()
         self.data_dir = data_dir
@@ -22,13 +22,17 @@ class ZINC(Dataset):
         self.file_x1='{}/x1.smi'.format(data_dir)
         self.file_x2_1='{}/x2_1.smi'.format(data_dir)
         self.file_x2_2='{}/x2_2.smi'.format(data_dir)
-
+        self.mode = mode
         self.max_sequence_length_y = 74
-        self.max_sequence_length_x1 = 134
-        self.max_sequence_length_x2 = 60
+        if self.mode==0:
+            self.max_sequence_length_x2 = 60
+            self.max_sequence_length_x1 = 134
+        else:
+            self.max_sequence_length_x2 = 64
+            self.max_sequence_length_x1 = 138
 
         self.vocab_file = 'vocab.pth'
-        self.data_file = 'data.json'
+        self.data_file = 'data_mode{}.json'.format(mode)
 
 
         if create_data:
@@ -49,8 +53,10 @@ class ZINC(Dataset):
 
         return {
             'x1': np.asarray(self.data[idx]['x1']),
+            'x1_mask': np.asarray(self.data[idx]['x1_mask']),
+            'idx_in_x1': np.asarray(self.data[idx]['idx_in_x1']),
             'x2': np.asarray(self.data[idx]['x2']),
-            'y': self.data[idx]['y']
+            'y': np.asarray(self.data[idx]['y'])
         }
 
     @property
@@ -72,6 +78,7 @@ class ZINC(Dataset):
 
         self._create_vocabulary()
         print(self.vocabulary.get_itos())
+        # exit()
         data = defaultdict(dict)
         f_x1 = open(self.file_x1, "r")
         f_x2_1 = open(self.file_x2_1, "r")
@@ -79,34 +86,59 @@ class ZINC(Dataset):
         f_y = open(self.file_y, "r")
 
         for line_x1, line_x2_1, line_x2_2, line_y in zip(f_x1, f_x2_1, f_x2_2, f_y):
-            line_x1 = line_x1.replace('[*]', "<pad>" * 30).strip()
+            line_x1 = line_x1.replace('[*]', "<pad>" * int(self.max_sequence_length_x2/2)).strip()
             words_x1 = self._tokenize(line_x1, with_begin_and_end=True)
+            mask_x1 = [x in ["<pad>"] for x in words_x1]
             words_x1 = words_x1 + ['<pad>'] * (self.max_sequence_length_x1 - len(words_x1))
+            mask_x1 =mask_x1 + [False] * (self.max_sequence_length_x1 - len(mask_x1))
+            true_idx_x1 = [i for i, x in enumerate(mask_x1) if x]
             idx_x1 = self.vocabulary.lookup_indices(words_x1)
 
             line_x2_1 = line_x2_1.replace('*', "").strip()
-            words_x2_1 = self._tokenize(line_x2_1, with_begin_and_end=False)
+            if self.mode ==0:
+                words_x2_1 = self._tokenize(line_x2_1, with_begin_and_end=False)
+            elif self.mode ==1:
+                words_x2_1 = self._tokenize(line_x2_1, with_begin_and_end=True)
+            elif self.mode ==2:
+                words_x2_1 = self._tokenize(line_x2_1, with_begin_and_end=True, start_token='!', end_token='&' )
+
+
             words_x2_1 = words_x2_1 + ['<pad>'] * (int((self.max_sequence_length_x2/2)) - len(words_x2_1))
             idx_x2_1 = self.vocabulary.lookup_indices(words_x2_1)
 
             line_x2_2 = line_x2_2.replace('*', "").strip()
-            words_x2_2 = self._tokenize(line_x2_2, with_begin_and_end=False)
-            words_x2_2 = words_x2_2 + ['<pad>'] * (int((self.max_sequence_length_x2/2)) - len(words_x2_2))
-            idx_x2_2 = self.vocabulary.lookup_indices(words_x2_2)
+            if line_x2_2=="":
+                idx_x2 = idx_x2_1 + idx_x2_1
+                true_idx_x1 = true_idx_x1 + true_idx_x1
+            else:
+                if self.mode == 0:
+                    words_x2_2 = self._tokenize(line_x2_2, with_begin_and_end=False)
+                elif self.mode == 1:
+                    words_x2_2 = self._tokenize(line_x2_2, with_begin_and_end=True)
+                elif self.mode == 2:
+                    words_x2_2 = self._tokenize(line_x2_2, with_begin_and_end=True, start_token='!', end_token='&')
+                words_x2_2 = words_x2_2 + ['<pad>'] * (int((self.max_sequence_length_x2/2)) - len(words_x2_2))
+                idx_x2_2 = self.vocabulary.lookup_indices(words_x2_2)
+                idx_x2 = idx_x2_1 + idx_x2_2
+
 
             line_y = line_y.strip()
             words_y = self._tokenize(line_y, with_begin_and_end=True)
             words_y = words_y + ['<pad>'] * (self.max_sequence_length_y - len(words_y))
             idx_y = self.vocabulary.lookup_indices(words_y)
 
-            idx_x2 = idx_x2_1 + idx_x2_2
+
 
             assert len(idx_x1) == self.max_sequence_length_x1
+            assert len(mask_x1) == self.max_sequence_length_x1
+            assert len(true_idx_x1) == self.max_sequence_length_x2
             assert len(idx_x2) == self.max_sequence_length_x2
             assert len(idx_y) == self.max_sequence_length_y
 
             id = len(data)
             data[id]['x1'] = idx_x1
+            data[id]['x1_mask'] = mask_x1
+            data[id]['idx_in_x1']=true_idx_x1
             data[id]['x2'] = idx_x2
             data[id]['y'] = idx_y
 
@@ -116,7 +148,7 @@ class ZINC(Dataset):
 
         self._load_data(vocab=False)
 
-    def _tokenize(self, smiles, with_begin_and_end=True, start_token='$', end_token='^'):
+    def _tokenize(self, smiles, with_begin_and_end=True, start_token='^', end_token='$'):
         REGEXPS = {
             "brackets": re.compile(r"(\[[^\]]*\])"),
             "2_ring_nums": re.compile(r"(%\d{2})"),
@@ -163,23 +195,45 @@ class ZINC(Dataset):
             words = self._tokenize(line, with_begin_and_end=False)
             counter_obj.update(words)
         f.close()
-        vocabulary = tt.vocab.vocab(counter_obj, min_freq=1, specials=["<pad>", "$", "^"])
+        vocabulary = tt.vocab.vocab(counter_obj, min_freq=1, specials=["<pad>", "^","$", "!","&"])
         torch.save(vocabulary,os.path.join(self.data_dir, self.vocab_file))
         self._load_vocab()
 
 
 if __name__ == '__main__':
+    '''
+    Mode 0:  X2 No start/ end token. X2 length will be 30 *2 = 60
+    '''
     dataset = ZINC(
         data_dir='./zinc/',
-        create_data=False,
+        create_data=True,
+        # create_data=False,
+        mode = 2
     )
     print(dataset.vocab_size)
     print(dataset.vocabulary.get_itos())
     print(dataset.vocabulary.lookup_indices(['C']))
+
+
+
+
+    train_dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
+    for tmp in train_dataloader:
+        print(tmp['x1'],tmp['x1_mask'],tmp['idx_in_x1'],tmp['x2'],tmp['y'])
+        # print(len(tmp['x1']), len(tmp['x1_mask']), len(tmp['x2']), len(tmp['y']))
+        # print(dataset.vocabulary.lookup_token(tmp['x1'][0]))
+        exit()
+
+
+
     num_train= int(len(dataset) *0.8)
     num_test= len(dataset) -num_train
 
     train_data, test_data = torch.utils.data.random_split(dataset, [num_train, num_test])
-    train_dataloader = DataLoader(train_data, batch_size=64, shuffle=True)
-    test_dataloader = DataLoader(test_data, batch_size=64, shuffle=True)
+    train_dataloader = DataLoader(train_data, batch_size=1, shuffle=True)
+    test_dataloader = DataLoader(test_data, batch_size=1, shuffle=True)
 
+    for tmp in train_dataloader:
+        print(tmp['x1'],tmp['x1_mask'],tmp['idx_in_x1'],tmp['x2'],tmp['y'])
+        print(len(tmp['x1']), len(tmp['x1_mask']), len(tmp['x2']), len(tmp['y']))
+        exit()

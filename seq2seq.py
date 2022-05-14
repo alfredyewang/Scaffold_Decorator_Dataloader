@@ -52,8 +52,6 @@ if __name__ == '__main__':
             print(scaffold_batch[1])            # x length in this batch
             print(decorator_batch[0])           # y index
             print(decorator_batch[1])           # y length in this batch
-
-            print(vocabulary.decode_decoration(decorator_batch[0]))
             exit()
 
 

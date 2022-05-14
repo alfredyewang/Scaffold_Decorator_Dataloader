@@ -52,6 +52,9 @@ if __name__ == '__main__':
             print(scaffold_batch[1])            # x length in this batch
             print(decorator_batch[0])           # y index
             print(decorator_batch[1])           # y length in this batch
+
+            scaffold_smiles = [vocabulary.decode_scaffold(seq) for seq in scaffold_batch[0].data.cpu().numpy()]
+            print(scaffold_smiles)
             exit()
 
 
